@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: MIT
+# 由 Custom/bootstrap-fork.sh 安装：Release 保留策略执行器
+#
+# 上游 Auto-Clean 的默认行为是「每天把所有 Release 删光」，那样永远只剩最新一次。
+# 这里改成：当天全部保留 + 最近 36 个月每月只留月末那次（约 3 年）。
+# 每天跑一次也无所谓，逻辑是幂等的：没有可删的就什么都不做。
+name: Custom-Clean
+
+on:
+  schedule:
+    # 北京时间 03:00（UTC 19:00），避开 21:00 的编译窗口
+    - cron: 0 19 * * *
+  workflow_dispatch:
+
+permissions: write-all
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  KEEP_MONTHS: '36'
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Projects
+        uses: actions/checkout@main
+
+      - name: Trim Releases(按月末保留 36 个月)
+        run: |
+          set -Eeuo pipefail
+          chmod +x Custom/release-clean.sh
+          Custom/release-clean.sh

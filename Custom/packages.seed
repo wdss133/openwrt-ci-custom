@@ -1,0 +1,88 @@
+# ============================================================================
+# AX6 定制插件清单（人读 + 机器读）
+#
+# 由 Custom/bootstrap-fork.sh 复制成 Config/PRIVATE.txt，
+# 被上游 Scripts/Settings.sh 追加到 .config 末尾（即在 GENERAL.txt 之后，
+# 所以这里的 is-not-set 可以覆盖 GENERAL.txt 里的 =y）。
+#
+# 加包 / 删包只改这个文件，然后重跑 bootstrap 即可。
+# ============================================================================
+
+# ---- 主题：argon（WRT_THEME 在 CUSTOM-AX6.yml 里指定）----
+CONFIG_PACKAGE_luci-theme-argon=y
+CONFIG_PACKAGE_luci-app-argon-config=y
+
+# ---- 内核模块：ZeroTier / EasyTier 的 TUN/TAP 依赖 ----
+CONFIG_PACKAGE_kmod-tun=y
+
+# ---- EasyTier（上游 Packages.sh 已从 EasyTier/luci-app-easytier 拉取）----
+# noweb = 用预编译二进制，编译快；想源码编译就换成 easytier=y / easytier-noweb=n
+CONFIG_PACKAGE_easytier-noweb=y
+CONFIG_PACKAGE_easytier=n
+CONFIG_PACKAGE_luci-app-easytier=y
+
+# ---- ZeroTier ----
+CONFIG_PACKAGE_zerotier=y
+CONFIG_PACKAGE_luci-app-zerotier=y
+
+# ---- ddns-go（上游 Packages.sh 已从 sirpdboy/luci-app-ddns-go 拉取）----
+CONFIG_PACKAGE_ddns-go=y
+CONFIG_PACKAGE_luci-app-ddns-go=y
+
+# ---- iStore 软件商店（4 个子包，由 Scripts/PRIVATE.sh 落位到 package/ 顶层）----
+CONFIG_PACKAGE_luci-app-store=y
+CONFIG_PACKAGE_luci-lib-taskd=y
+CONFIG_PACKAGE_luci-lib-xterm=y
+CONFIG_PACKAGE_taskd=y
+
+# ---- 微信/Telegram/邮件推送（由 Scripts/PRIVATE.sh 拉取）----
+CONFIG_PACKAGE_luci-app-wechatpush=y
+CONFIG_PACKAGE_iputils-arping=y
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_jq=y
+CONFIG_PACKAGE_bash=y
+CONFIG_PACKAGE_luci-lua-runtime=y
+CONFIG_PACKAGE_luci-compat=y
+
+# ============================================================================
+# CUT-BEGIN —— 这行以下为「裁剪」段，上面的都算新增安装
+# ============================================================================
+
+# ---- btrfs / samba ----
+# CONFIG_PACKAGE_kmod-fs-btrfs is not set
+# CONFIG_PACKAGE_luci-app-samba4 is not set
+
+# ---- USB 核心与主机控制器 ----
+# CONFIG_PACKAGE_kmod-usb-core is not set
+# CONFIG_PACKAGE_kmod-usb-common is not set
+# CONFIG_PACKAGE_kmod-usb-dwc3 is not set
+# CONFIG_PACKAGE_kmod-usb-dwc3-qcom is not set
+# CONFIG_PACKAGE_kmod-usb-xhci-hcd is not set
+# CONFIG_PACKAGE_kmod-usb-ohci is not set
+# CONFIG_PACKAGE_kmod-usb-uhci is not set
+
+# ---- USB 网络（RNDIS / CDC / 各种网卡驱动）----
+# CONFIG_PACKAGE_kmod-usb-net is not set
+# CONFIG_PACKAGE_kmod-usb-net-asix is not set
+# CONFIG_PACKAGE_kmod-usb-net-asix-ax88179 is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-eem is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-ether is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-mbim is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-ncm is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-subset is not set
+# CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm is not set
+# CONFIG_PACKAGE_kmod-usb-net-ipheth is not set
+# CONFIG_PACKAGE_kmod-usb-net-rndis is not set
+# CONFIG_PACKAGE_kmod-usb-net-rtl8150 is not set
+# CONFIG_PACKAGE_kmod-usb-net-rtl8152 is not set
+# CONFIG_PACKAGE_kmod-usb-net-sierrawireless is not set
+
+# ---- USB 串口 / WWAN / 存储 ----
+# CONFIG_PACKAGE_kmod-usb-serial is not set
+# CONFIG_PACKAGE_kmod-usb-serial-qualcomm is not set
+# CONFIG_PACKAGE_kmod-usb-serial-wwan is not set
+# CONFIG_PACKAGE_kmod-usb-wdm is not set
+# CONFIG_PACKAGE_kmod-usb-roles is not set
+# CONFIG_PACKAGE_kmod-usb-storage is not set
+# CONFIG_PACKAGE_kmod-usb-storage-extras is not set
+# CONFIG_PACKAGE_kmod-usb-storage-uas is not set

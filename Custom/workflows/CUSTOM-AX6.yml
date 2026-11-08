@@ -1,0 +1,135 @@
+# SPDX-License-Identifier: MIT
+# 由 Custom/bootstrap-fork.sh 安装：AX6 专用编译入口
+#
+# 设计说明：
+#   - 每月只编 3 次：10 日、20 日、当月最后一天，北京时间 21:00（UTC 13:00）
+#   - POSIX cron 没有「最后一天」语法，所以日字段列 10,20,28,29,30,31，
+#     再由 gate job 用「明天是不是 1 号」判定真正的月末；非月末直接跳过，
+#     不占用 runner、不产生 Release。
+#   - 真正的编译逻辑复用上游 WRT-CORE.yml，一行未改。
+#   - 编译成功后由 polish job 按本项目格式重写 Release 说明（两段式插件表）。
+#   - 产物命名沿用上游规则：
+#       qualcommax-ipq807x-redmi_ax6-stock-squashfs-factory-VIKINGYFY-owrt-WIFI-YES-YY.MM.DD-HH.MM.SS.ubi
+name: CUSTOM-AX6
+
+on:
+  schedule:
+    # cron 按 UTC；13:00 UTC = 北京 21:00
+    - cron: 0 13 10,20,28,29,30,31 * *
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '临时追加插件（写完整 CONFIG_ 行，多个用换行隔开）'
+        required: false
+        type: string
+      TEST:
+        description: '仅输出配置文件，不编译固件'
+        default: false
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      kind: ${{ steps.decide.outputs.kind }}
+    steps:
+      - name: Decide(判定今天该不该编译)
+        id: decide
+        run: |
+          set -Eeuo pipefail
+          # 与 WRT-CORE 同一时区口径：cron 13:00 UTC == 北京 21:00，同一日历日
+          hh="$(date -u +%H)"
+          d="$(date -u +%Y-%m-%d)"
+          # GitHub 调度可能延迟：若被延到次日 00:00~12:59 UTC，回退成"昨天那次调度"
+          if [ "$hh" -lt 13 ]; then d="$(date -u -d yesterday +%Y-%m-%d)"; fi
+          day="${d##*-}"
+          tomorrow="$(date -u -d "$d +1 day" +%d)"
+          run=false
+          kind=skip
+          case "$day" in
+            10) run=true; kind=d10 ;;
+            20) run=true; kind=d20 ;;
+            28|29|30|31)
+              if [ "$tomorrow" = "01" ]; then run=true; kind=month_end; fi ;;
+          esac
+          {
+            echo "run=$run"
+            echo "kind=$kind"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### 编译日判定"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 触发方式 | \`${{ github.event_name }}\` |"
+            echo "| 意图日期(UTC) | \`$d\` |"
+            echo "| 明天的日号 | \`$tomorrow\` |"
+            echo "| 结论 | \`$kind\` |"
+            echo "| 是否编译 | \`$run\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: ${{ matrix.CONFIG }}
+    needs: gate
+    # 日历判定通过才编；手动触发一律放行（方便随时补编）
+    if: ${{ needs.gate.outputs.run == 'true' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 注意：配置文件必须叫 <名字>-WIFI-YES.txt，
+        # WRT-CORE 靠这个名字提取产物名里的 WIFI 段，改成别的会变成 none
+        CONFIG: [AX6-WIFI-YES]
+        SOURCE: [VIKINGYFY/immortalwrt]
+        BRANCH: [owrt]
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      # 编译配置：Config/AX6-WIFI-YES.txt 里只有 redmi_ax6-stock
+      WRT_CONFIG: ${{ matrix.CONFIG }}
+      # 默认主题（argon 源码由上游 Scripts/Packages.sh 从 sbwml/luci-theme-argon 拉取）
+      WRT_THEME: argon
+      # 默认主机名
+      WRT_NAME: AX6
+      # 默认 WIFI 名称
+      WRT_SSID: AX6
+      # 默认 WIFI 密码
+      WRT_WORD: '12345678'
+      # 默认地址
+      WRT_IP: 192.168.2.1
+      # 默认密码，仅作提示
+      WRT_PW: 无
+      # 源码
+      WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
+      WRT_BRANCH: ${{ matrix.BRANCH }}
+      WRT_SOURCE: ${{ matrix.SOURCE }}
+      # 手动追加的插件
+      WRT_PACKAGE: ${{ inputs.PACKAGE }}
+      # 仅输出配置
+      WRT_TEST: ${{ inputs.TEST || false }}
+
+  polish:
+    name: Polish Release
+    needs: build
+    if: ${{ always() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Projects
+        uses: actions/checkout@main
+
+      - name: Rewrite Release Notes(按本项目格式重写发布说明)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_MONTHS: '36'
+          LAN_IP: 192.168.2.1
+          HOSTNAME_: AX6
+          SSID: AX6
+        run: |
+          set -Eeuo pipefail
+          chmod +x Custom/gen-release-body.sh
+          Custom/gen-release-body.sh
