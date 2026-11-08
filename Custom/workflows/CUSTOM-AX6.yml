@@ -40,23 +40,34 @@ jobs:
     steps:
       - name: Decide(判定今天该不该编译)
         id: decide
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
           set -Eeuo pipefail
-          # 与 WRT-CORE 同一时区口径：cron 13:00 UTC == 北京 21:00，同一日历日
           hh="$(date -u +%H)"
           d="$(date -u +%Y-%m-%d)"
-          # GitHub 调度可能延迟：若被延到次日 00:00~12:59 UTC，回退成"昨天那次调度"
-          if [ "$hh" -lt 13 ]; then d="$(date -u -d yesterday +%Y-%m-%d)"; fi
+          # 只有定时触发才需要「延迟回退」：schedule 名义上是 13:00 UTC（北京 21:00），
+          # 若被 GitHub 延到次日 00:00~12:59 UTC，意图日期应算前一天。
+          # 手动触发必须用当天日期——否则白天手动跑会被回退到昨天，误判成 skip。
+          if [ "$EVENT" = "schedule" ] && [ "$hh" -lt 13 ]; then
+            d="$(date -u -d yesterday +%Y-%m-%d)"
+          fi
           day="${d##*-}"
           tomorrow="$(date -u -d "$d +1 day" +%d)"
           run=false
           kind=skip
-          case "$day" in
-            10) run=true; kind=d10 ;;
-            20) run=true; kind=d20 ;;
-            28|29|30|31)
-              if [ "$tomorrow" = "01" ]; then run=true; kind=month_end; fi ;;
-          esac
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # 手动触发不做日历判定，直接编（补编 / 测试用）
+            run=true
+            kind=manual
+          else
+            case "$day" in
+              10) run=true; kind=d10 ;;
+              20) run=true; kind=d20 ;;
+              28|29|30|31)
+                if [ "$tomorrow" = "01" ]; then run=true; kind=month_end; fi ;;
+            esac
+          fi
           {
             echo "run=$run"
             echo "kind=$kind"
@@ -64,9 +75,13 @@ jobs:
           {
             echo "### 编译日判定"
             echo ""
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "> ✋ **手动触发**：跳过日历判定，直接编译（补编 / 测试用）。"
+              echo ""
+            fi
             echo "| 项 | 值 |"
             echo "|---|---|"
-            echo "| 触发方式 | \`${{ github.event_name }}\` |"
+            echo "| 触发方式 | \`${EVENT}\` |"
             echo "| 意图日期(UTC) | \`$d\` |"
             echo "| 明天的日号 | \`$tomorrow\` |"
             echo "| 结论 | \`$kind\` |"
