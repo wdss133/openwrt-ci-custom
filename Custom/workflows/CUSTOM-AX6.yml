@@ -15,7 +15,17 @@ name: CUSTOM-AX6
 on:
   schedule:
     # cron 按 UTC；13:00 UTC = 北京 21:00
-    - cron: 0 13 10,20,28,29,30,31 * *
+    #
+    # 这里刻意拆成 6 条单值 cron，而不是写成 10,20,28,29,30,31 的列表：
+    # 列表形式的 day-of-month 在本仓库实测「一次都没被 GitHub 调度器注册」，
+    # 而单值/通配的 cron（如 Custom-Clean 的 0 19 * * *）能正常触发。
+    # 多个 schedule 条目是官方支持的写法，单值更稳。
+    - cron: 0 13 10 * *
+    - cron: 0 13 20 * *
+    - cron: 0 13 28 * *
+    - cron: 0 13 29 * *
+    - cron: 0 13 30 * *
+    - cron: 0 13 31 * *
   workflow_dispatch:
     inputs:
       PACKAGE:

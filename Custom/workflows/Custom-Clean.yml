@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: MIT
-# 由 Custom/bootstrap-fork.sh 安装：Release 保留策略执行器
+# 由 Custom/bootstrap-fork.sh 安装：每日巡检 + Release 保留策略
 #
-# 上游 Auto-Clean 的默认行为是「每天把所有 Release 删光」，那样永远只剩最新一次。
-# 这里改成：当天全部保留 + 最近 36 个月每月只留月末那次（约 3 年）。
-# 每天跑一次也无所谓，逻辑是幂等的：没有可删的就什么都不做。
+# 干两件事：
+#   1) 兜底触发编译：CUSTOM-AX6 的 schedule 在本仓库实测没被 GitHub 注册
+#      （列表式 day-of-month 不生效），所以用这个「已验证能跑」的每日 cron
+#      当调度器：发现「今天/昨天是编译日但没有产物」就 gh workflow run 补一次。
+#   2) 清理旧 Release：当天全部保留 + 最近 36 个月每月只留月末那次（约 3 年）。
+#
+# 幂等：没有可补的就不触发；没有可删的就不删。
 name: Custom-Clean
 
 on:
@@ -24,6 +28,53 @@ jobs:
     steps:
       - name: Checkout Projects
         uses: actions/checkout@main
+
+      - name: Maybe Trigger Build(编译日兜底)
+        run: |
+          set -Eeuo pipefail
+
+          # 最近 36 小时内只要有固件产物就跳过，避免「手动补编 + 兜底」重复触发
+          RECENT="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 30 \
+            --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | test("-WIFI-(YES|NO)-"))
+                       | select((.createdAt | fromdateiso8601) > (now - 129600))] | length' 2>/dev/null || echo 0)"
+          if [ "${RECENT:-0}" -gt 0 ]; then
+            echo "[ok] 最近 36 小时已有 ${RECENT} 个固件产物，跳过兜底"
+            exit 0
+          fi
+
+          # 再看「今天」和「昨天」：cron 本身会延迟几小时，跨过零点也能补上
+          for OFFSET in 0 1; do
+            D="$(TZ=Asia/Shanghai date -d "-${OFFSET} day" +%d)"
+            ND="$(TZ=Asia/Shanghai date -d "-${OFFSET} day +1 day" +%d)"
+            TAGDATE="$(TZ=Asia/Shanghai date -d "-${OFFSET} day" +%y.%m.%d)"
+            HUMANDATE="$(TZ=Asia/Shanghai date -d "-${OFFSET} day" +%Y-%m-%d)"
+
+            # 判定这一天是不是编译日
+            IS_BUILD=false
+            case "$D" in
+              10|20) IS_BUILD=true ;;
+              28|29|30|31)
+                if [ "$ND" = "01" ]; then IS_BUILD=true; fi ;;
+            esac
+            if [ "$IS_BUILD" != "true" ]; then
+              echo "[skip] ${HUMANDATE} 不是编译日"
+              continue
+            fi
+
+            # 已经编译过就不重复触发（tag 里带 yy.mm.dd）
+            if gh release list --repo "$GITHUB_REPOSITORY" --limit 40 --json tagName \
+                 --jq '.[].tagName' | grep -q -- "$TAGDATE"; then
+              echo "[ok] ${HUMANDATE} 已有产物（tag 含 ${TAGDATE}）"
+              continue
+            fi
+
+            echo "[trigger] ${HUMANDATE} 是编译日但没有产物，补触发 CUSTOM-AX6"
+            gh workflow run CUSTOM-AX6.yml --repo "$GITHUB_REPOSITORY" --ref main
+            exit 0
+          done
+
+          echo "无需补编"
 
       - name: Trim Releases(按月末保留 36 个月)
         run: |

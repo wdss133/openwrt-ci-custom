@@ -30,7 +30,8 @@ check "关闭了 MULTI_PROFILE" "grep -q '^# CONFIG_TARGET_MULTI_PROFILE is not 
 
 echo "== 2. 编译入口"
 check "CUSTOM-AX6.yml 已安装" "[ -f .github/workflows/CUSTOM-AX6.yml ]"
-check "cron 是 10,20,28,29,30,31" "grep -q 'cron: 0 13 10,20,28,29,30,31' .github/workflows/CUSTOM-AX6.yml"
+check "cron 拆成 6 条单值（10/20/28/29/30/31）" "[ \"$(grep -c 'cron: 0 13 [0-9]' .github/workflows/CUSTOM-AX6.yml)\" = 6 ]"
+check "Custom-Clean 带编译日兜底" "grep -q 'Maybe Trigger Build' .github/workflows/Custom-Clean.yml"
 check "matrix 只有一个 CONFIG" "grep -q 'CONFIG: \[AX6-WIFI-YES\]' .github/workflows/CUSTOM-AX6.yml"
 check "仍复用上游 WRT-CORE.yml" "grep -q 'uses: ./.github/workflows/WRT-CORE.yml' .github/workflows/CUSTOM-AX6.yml"
 check "带 polish job 重写发布说明" "grep -q 'Polish Release' .github/workflows/CUSTOM-AX6.yml"
