@@ -34,12 +34,14 @@ log "共 ${#TAGS[@]} 个 Release，当月 ${NOW_YM}，保留 ${KEEP_MONTHS} 个�
 declare -A LAST_OF_MONTH   # ym -> 该月最后一次的 tag
 declare -A CUR_MONTH       # 当月 tag 集合
 declare -A SEEN_MONTH      # 去重用
+SEEN_COUNT=0               # 用普通变量计数：set -u 下对空关联数组取长度会报 unbound
 
 for t in "${TAGS[@]}"; do
-	# 只认本项目产物：...-WIFI-YES-YY.MM.DD-HH.MM.SS / ...-WIFI-NO-...
+	# 只认本项目产物。注意 tag 结构是：
+	#   <配置>-WIFI-YES-<源码作者>-<分支>-YY.MM.DD-HH.MM.SS
+	# 中间还有作者/分支两段，所以这里只按 -WIFI-YES- 前缀筛，日期交给下面的正则校验。
 	case "$t" in
-		*-WIFI-YES-[0-9][0-9].[0-9][0-9].[0-9][0-9]-*) ;;
-		*-WIFI-NO-[0-9][0-9].[0-9][0-9].[0-9][0-9]-*) ;;
+		*-WIFI-YES-*|*-WIFI-NO-*) ;;
 		*) continue ;;
 	esac
 	[[ "$t" =~ -([0-9]{2})\.([0-9]{2})\.([0-9]{2})-([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]] || continue
@@ -53,13 +55,22 @@ for t in "${TAGS[@]}"; do
 		LAST_OF_MONTH["$ym"]="$t"
 	fi
 	SEEN_MONTH["$ym"]=1
+	SEEN_COUNT=1
 done
 
 # 最近 KEEP_MONTHS 个月（按 ym 倒序）
+# 防御：一个可识别的固件 Release 都没有时，YMS 会拿到一个空字符串，
+# 后面 LAST_OF_MONTH[""] 会触发 bad array subscript，这里提前退出。
+if [ "$SEEN_COUNT" -eq 0 ]; then
+	log "没有可识别的固件 Release（形如 *-WIFI-YES-...），跳过清理"
+	exit 0
+fi
+
 mapfile -t YMS < <(printf '%s\n' "${!SEEN_MONTH[@]}" | sort -r | head -n "$KEEP_MONTHS")
 
 declare -A KEEP
 for ym in "${YMS[@]}"; do
+	[ -n "$ym" ] || continue
 	KEEP["${LAST_OF_MONTH[$ym]}"]=1
 done
 for t in "${!CUR_MONTH[@]}"; do
@@ -73,8 +84,7 @@ DELETED=0
 for t in "${TAGS[@]}"; do
 	[ -n "${KEEP[$t]:-}" ] && continue
 	case "$t" in
-		*-WIFI-YES-[0-9][0-9].[0-9][0-9].[0-9][0-9]-*) ;;
-		*-WIFI-NO-[0-9][0-9].[0-9][0-9].[0-9][0-9]-*) ;;
+		*-WIFI-YES-*|*-WIFI-NO-*) ;;
 		*) continue ;;
 	esac
 	if [ "$DRY_RUN" = "true" ]; then
