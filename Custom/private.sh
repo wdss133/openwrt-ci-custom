@@ -91,4 +91,33 @@ UCI_EOF
 chmod +x "$UCI_DIR/98_custom_enable_services"
 echo "uci-defaults: 已注入 98_custom_enable_services"
 
+# ---------------------------------------------------------------------------
+# 4) 干掉 target 的 DEFAULT_PACKAGES 里的 USB / automount
+#
+# .config 里写 CONFIG_PACKAGE_xxx=n 或 CONFIG_DEFAULT_xxx is not set 都压不住：
+# 它们是 target Makefile 里 DEFAULT_PACKAGES += 直接追加的，kconfig 优先级更高。
+# 实测残留：kmod-usb-core / kmod-usb-common / kmod-usb-xhci-hcd / kmod-fs-btrfs
+# 源头就在 target/linux/qualcommax/Makefile 的这几行。
+# 只能改源码树（源码树是每次克隆的临时副本，不涉及仓库里的上游文件）。
+# ---------------------------------------------------------------------------
+TCONF="./target/linux/qualcommax/Makefile"
+if [ -f "$TCONF" ]; then
+	awk '
+	BEGIN {
+		n = split("automount kmod-usb3 kmod-usb-dwc3-qcom kmod-usb-dwc3 kmod-usb-serial-qualcomm", a, " ")
+		for (i = 1; i <= n; i++) bad[a[i]] = 1
+	}
+	{
+		out = ""
+		for (i = 1; i <= NF; i++) {
+			if ($i in bad) continue
+			out = (out == "" ? $i : out " " $i)
+		}
+		print out
+	}' "$TCONF" > "${TCONF}.new" && mv "${TCONF}.new" "$TCONF"
+	echo "target DEFAULT_PACKAGES: 已移除 automount / kmod-usb3 / dwc3 / dwc3-qcom / serial-qualcomm"
+else
+	echo "target DEFAULT_PACKAGES: 没找到 $TCONF，跳过"
+fi
+
 echo "========== PRIVATE.sh 完成 =========="

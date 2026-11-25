@@ -80,15 +80,18 @@ jobs:
             esac
           fi
 
-          # 去重：同一个编译日已经产出过固件就不再编。
-          # 场景：cron 延迟到次日凌晨才跑，而当晚 Custom-Clean 的兜底已经先补编过了，
-          # 没有这一步会在同一编译日编两次（实测 11-20 就这样编了两遍）。
+          # 去重：24 小时内已有固件产物就不再编。
+          # 不用「意图日期」比对，是因为兜底补编时产物 tag 用的是「当天」日期，
+          # cron 延迟到次日时意图日期是「前一天」，两者对不上就会漏判、重复编两次。
+          # 24 小时窗口能同时覆盖「cron 延迟」和「兜底先编」两种顺序。
           if [ "$run" = "true" ] && [ "$EVENT" = "schedule" ]; then
-            TAGDATE="$(date -u -d "$d" +%y.%m.%d)"
-            if gh release list --repo "$GITHUB_REPOSITORY" --limit 40 --json tagName \
-                 --jq '.[].tagName' 2>/dev/null | grep -q -- "$TAGDATE"; then
+            RECENT="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 30 \
+              --json tagName,createdAt \
+              --jq '[.[] | select(.tagName | test("-WIFI-(YES|NO)-"))
+                         | select((.createdAt | fromdateiso8601) > (now - 86400))] | length' 2>/dev/null || echo 0)"
+            if [ "${RECENT:-0}" -gt 0 ]; then
               run=false
-              kind="skip_already_built"
+              kind="skip_recent_build"
             fi
           fi
 
@@ -110,9 +113,9 @@ jobs:
             echo "| 明天的日号 | \`$tomorrow\` |"
             echo "| 结论 | \`$kind\` |"
             echo "| 是否编译 | \`$run\` |"
-            if [ "$kind" = "skip_already_built" ]; then
+            if [ "$kind" = "skip_recent_build" ]; then
               echo ""
-              echo "> ♻️ 该编译日已有固件产物（tag 含 \`$TAGDATE\`），跳过重复编译。"
+              echo "> ♻️ 最近 24 小时内已有 ${RECENT} 个固件产物，跳过重复编译。"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
