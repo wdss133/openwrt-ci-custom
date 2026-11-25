@@ -119,9 +119,32 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+  trim:
+    name: Trim Releases
+    needs: gate
+    # 只在真正要编译时清理（含手动触发），一个月恰好 3 次，紧跟打包之前
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Projects
+        uses: actions/checkout@main
+
+      - name: Trim old releases(编译前清理)
+        # 清理失败不能挡住编译
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP_MONTHS: '36'
+        run: |
+          set -Eeuo pipefail
+          chmod +x Custom/release-clean.sh
+          Custom/release-clean.sh
+
   build:
     name: ${{ matrix.CONFIG }}
-    needs: gate
+    needs: [gate, trim]
     # 日历判定通过才编；手动触发一律放行（方便随时补编）
     if: ${{ needs.gate.outputs.run == 'true' || github.event_name == 'workflow_dispatch' }}
     strategy:

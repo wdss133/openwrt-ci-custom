@@ -32,8 +32,9 @@ echo "== 2. 编译入口"
 check "CUSTOM-AX6.yml 已安装" "[ -f .github/workflows/CUSTOM-AX6.yml ]"
 check "cron 拆成 6 条单值（10/20/28/29/30/31）" "[ \"$(grep -c 'cron: 0 13 [0-9]' .github/workflows/CUSTOM-AX6.yml)\" = 6 ]"
 check "Custom-Clean 带编译日兜底" "grep -q 'Guard(编译日次日兜底)' .github/workflows/Custom-Clean.yml"
-check "Custom-Clean 清理只在编译日 20:00" "grep -q 'cron: 0 12 10' .github/workflows/Custom-Clean.yml"
-check "Custom-Clean 兜底只在次日 03:00 三条" "[ \"$(grep -c 'cron: 0 19' .github/workflows/Custom-Clean.yml)\" = 3 ]"
+check "清理已挪进 CUSTOM-AX6 的 trim job" "grep -q '^  trim:' .github/workflows/CUSTOM-AX6.yml"
+check "trim 在 build 之前（build needs 含 trim）" "grep -q 'needs: \[gate, trim\]' .github/workflows/CUSTOM-AX6.yml"
+check "Custom-Clean 只跑 3 条 cron" "[ \"$(grep -c 'cron: 0 19' .github/workflows/Custom-Clean.yml)\" = 3 ]"
 check "matrix 只有一个 CONFIG" "grep -q 'CONFIG: \[AX6-WIFI-YES\]' .github/workflows/CUSTOM-AX6.yml"
 check "仍复用上游 WRT-CORE.yml" "grep -q 'uses: ./.github/workflows/WRT-CORE.yml' .github/workflows/CUSTOM-AX6.yml"
 check "带 polish job 重写发布说明" "grep -q 'Polish Release' .github/workflows/CUSTOM-AX6.yml"
@@ -46,7 +47,7 @@ check "Cache-Clean 仍是每周" "grep -q 'cron: 0 20 \* \* 0' .github/workflows
 
 echo "== 4. 保留策略"
 check "Custom-Clean.yml 已安装" "[ -f .github/workflows/Custom-Clean.yml ]"
-check "保留 36 个月" "grep -q \"KEEP_MONTHS: '36'\" .github/workflows/Custom-Clean.yml"
+check "保留 36 个月" "grep -q \"KEEP_MONTHS: '36'\" .github/workflows/CUSTOM-AX6.yml"
 
 echo "== 5. 插件清单"
 for PKG in kmod-tun luci-app-easytier easytier-noweb zerotier luci-app-zerotier ddns-go luci-app-ddns-go luci-app-store luci-lib-taskd luci-lib-xterm taskd luci-app-wechatpush luci-theme-argon luci-app-argon-config; do

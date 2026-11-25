@@ -1,24 +1,19 @@
 # SPDX-License-Identifier: MIT
-# 由 Custom/bootstrap-fork.sh 安装：Release 清理 + 编译日兜底
+# 由 Custom/bootstrap-fork.sh 安装：编译日兜底
 #
-# 两条时间线，用 github.event.schedule 区分执行哪个步骤：
-#   1) 清理：编译日（10/20/28/29/30/31）北京时间 20:00（UTC 12:00）
-#      —— 打包前 1 小时，只清一次，不再每天扫
-#   2) 兜底：编译日次日北京时间 03:00（UTC 19:00）
-#      —— 只检查「昨天」该编的那次有没有产物，漏了就补一次
-#      日期只用 1 / 11 / 21 三条 cron（1 号对应"月末那次"）
+# 只干一件事：编译日次日凌晨检查「昨天该编的那次」有没有产物，漏了就补一次。
+#   - cron 只有 1 / 11 / 21 三条：
+#       21 号 = 查 20 号
+#       11 号 = 查 10 号
+#       1 号  = 查月末（28/29/30/31）
+#   - 一个月只跑 3 次（1 号那条每月都有，但只有昨天是月末时才真正检查）
+#
+# Release 清理已经挪到 CUSTOM-AX6 里（编译前 trim job），
+# 所以这里不再做清理，避免两个 workflow 抢同一个时间窗。
 name: Custom-Clean
 
 on:
   schedule:
-    # === 清理：编译日 20:00（打包前 1 小时）===
-    - cron: 0 12 10 * *
-    - cron: 0 12 20 * *
-    - cron: 0 12 28 * *
-    - cron: 0 12 29 * *
-    - cron: 0 12 30 * *
-    - cron: 0 12 31 * *
-    # === 兜底：编译日次日 03:00 ===
     - cron: 0 19 11 * *   # 10 号 → 11 号凌晨
     - cron: 0 19 21 * *   # 20 号 → 21 号凌晨
     - cron: 0 19 1 * *    # 月末（28/29/30/31）→ 次月 1 号凌晨
@@ -28,24 +23,15 @@ permissions: write-all
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  KEEP_MONTHS: '36'
 
 jobs:
-  clean:
+  guard:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Projects
         uses: actions/checkout@main
 
-      - name: Trim Releases(编译前 1 小时清理)
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.schedule, '0 12') }}
-        run: |
-          set -Eeuo pipefail
-          chmod +x Custom/release-clean.sh
-          Custom/release-clean.sh
-
       - name: Guard(编译日次日兜底)
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.schedule, '0 19') }}
         run: |
           set -Eeuo pipefail
 
